@@ -1,0 +1,201 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>AI SQL Chatbot</title>
+
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background: #0f172a;
+            color: #e2e8f0;
+            margin: 0;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 800px;
+            margin: auto;
+        }
+
+        h1 {
+            color: #38bdf8;
+            text-align: center;
+            margin-bottom: 20px;
+        }
+
+        .chat-box {
+            background: #1e293b;
+            border-radius: 10px;
+            padding: 20px;
+            min-height: 400px;
+            max-height: 500px;
+            overflow-y: auto;
+            margin-bottom: 20px;
+        }
+
+        .msg {
+            margin: 10px 0;
+            padding: 12px;
+            border-radius: 8px;
+            white-space: pre-wrap;
+        }
+
+        .user {
+            background: #0891b2;
+            text-align: right;
+            margin-left: 20%;
+        }
+
+        .bot {
+            background: #334155;
+            margin-right: 20%;
+        }
+
+        .sql {
+            margin-top: 8px;
+            padding: 8px;
+            background: #0f172a;
+            border-radius: 4px;
+            color: #94a3b8;
+            font-family: monospace;
+            font-size: 13px;
+        }
+
+        .input-area {
+            display: flex;
+            gap: 10px;
+        }
+
+        input {
+            flex: 1;
+            padding: 12px;
+            border: none;
+            border-radius: 8px;
+            background: #334155;
+            color: white;
+            font-size: 16px;
+        }
+
+        button {
+            padding: 12px 24px;
+            border: none;
+            border-radius: 8px;
+            background: #38bdf8;
+            color: #0f172a;
+            cursor: pointer;
+            font-weight: bold;
+            font-size: 16px;
+        }
+
+        button:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+    </style>
+</head>
+
+<body>
+
+<div class="container">
+    <h1>🤖 AI SQL Chatbot</h1>
+
+    <div class="chat-box" id="chatBox"></div>
+
+    <div class="input-area">
+        <input
+            type="text"
+            id="query"
+            placeholder="Ask about your database..."
+            onkeypress="if(event.key==='Enter') ask()">
+
+        <button onclick="ask()" id="askBtn">
+            Ask
+        </button>
+    </div>
+</div>
+
+<script>
+
+async function ask() {
+
+    const query = document.getElementById("query").value;
+
+    if (!query.trim()) return;
+
+    const chatBox = document.getElementById("chatBox");
+    const askBtn = document.getElementById("askBtn");
+
+    // Display user message
+    chatBox.innerHTML += `
+        <div class="msg user">
+            ${query}
+        </div>
+    `;
+
+    document.getElementById("query").value = "";
+
+    askBtn.disabled = true;
+    askBtn.innerText = "Thinking...";
+
+    try {
+
+        const res = await fetch("http://127.0.0.1:8000/ask", {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json"
+            },
+            body: JSON.stringify({
+                query: query
+            })
+        });
+
+        const data = await res.json();
+
+        if (data.error) {
+
+            chatBox.innerHTML += `
+                <div class="msg bot">
+                    ❌ ${data.error}
+                    <div class="sql">
+                        SQL: ${data.sql || "Not Generated"}
+                    </div>
+                </div>
+            `;
+
+        } else {
+
+            chatBox.innerHTML += `
+                <div class="msg bot">
+                    ${data.answer}
+                    <div class="sql">
+                        SQL: ${data.sql}
+                    </div>
+                </div>
+            `;
+
+        }
+
+    } catch (err) {
+
+        chatBox.innerHTML += `
+            <div class="msg bot">
+                ❌ Server error. Is Uvicorn running?
+            </div>
+        `;
+
+        console.error(err);
+
+    }
+
+    askBtn.disabled = false;
+    askBtn.innerText = "Ask";
+
+    chatBox.scrollTop = chatBox.scrollHeight;
+
+}
+
+</script>
+
+</body>
+</html>
