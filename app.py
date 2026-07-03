@@ -1,72 +1,49 @@
-from fastapi import FastAPI, Request
+from fastapi import FastAPI
+from fastapi.staticfiles import StaticFiles
+from fastapi.responses import FileResponse
 from fastapi.middleware.cors import CORSMiddleware
+from pydantic import BaseModel
 from groq import Groq
-import sqlite3
 import os
-import re
-from dotenv import load_dotenv
-
-load_dotenv()
 
 app = FastAPI()
 
+# Allow frontend to call backend
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
+    allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-client = Groq(api_key=os.getenv("GROQ_API_KEY"))
-conn = sqlite3.connect("database.db", check_same_thread=False)
-cur = conn.cursor()
+# Initialize Groq client
+client = Groq(
+    api_key=os.environ.get("GROQ_API_KEY"),
+)
 
-def clean_sql(text):
-    text = re.sub(r'sql|', '', text)
-    text = text.replace(';', '').strip()
-    return text
-
-def is_safe_sql(sql):
-    dangerous = ['drop', 'delete', 'update', 'insert', 'alter', 'truncate', 'create', 'replace']
-    sql_lower = sql.lower()
-    for word in dangerous:
-        if word in sql_lower:
-            return False
-    return True
+class Question(BaseModel):
+    question: str
 
 @app.post("/ask")
-async def ask_db(request: Request):
-    data = await request.json()
-    query = data.get("query")
-
-    schema = "Table: employees(id, name, department, salary). Department values are: Engineering, Marketing, HR. Use exact case."
-    prompt = f"You are a SQL expert. Given schema: {schema}. Convert this to SQL: {query}. Only return SQL, no explanation, no markdown."
-
-    response = client.chat.completions.create(
-        model="llama-3.1-8b-instant",
+async def ask_question(question: Question):
+    chat_completion = client.chat.completions.create(
         messages=[
-            {"role": "system", "content": prompt},
-            {"role": "user", "content": query}
+            {
+                "role": "system",
+                "content": "You are a helpful assistant that converts natural language to SQL queries. Only return the SQL query, no explanation."
+            },
+            {
+                "role": "user",
+                "content": question.question,
+            }
         ],
-        temperature=0
+        model="llama-3.1-70b-versatile",
     )
+    answer = chat_completion.choices[0].message.content
+    return {"answer": answer}
 
-    sql = clean_sql(response.choices[0].message.content)
-
-    if not is_safe_sql(sql):
-        return {"error": "Sorry, I can only read data. I cannot modify or delete.", "sql": sql}
-
-    try:
-        cur.execute(sql)
-        result = cur.fetchall()
-
-        if not result:
-            answer = "No results found"
-        elif len(result) == 1 and len(result[0]) == 1:
-            answer = str(result[0][0])
-        else:
-            answer = "\n".join([", ".join(map(str, row)) for row in result])
-
-        return {"answer": answer, "sql": sql}
-    except Exception as e:
-        return {"error": str(e), "sql": sql}
+# THIS SERVES YOUR index.html FILE
+@app.get("/")
+async def read_index():
+    return FileResponse('index.html')
