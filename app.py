@@ -12,11 +12,7 @@ load_dotenv()
 
 app = FastAPI()
 
-<<<<<<< HEAD
 
-=======
-# 1. CORS FIX
->>>>>>> 246d1535c2153ff6d17d71fedf94c3682ddacc1e
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -25,15 +21,13 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-<<<<<<< HEAD
+
 
 client = Groq(
     api_key=os.getenv("GROQ_API_KEY")
 )
-=======
-# 2. GROQ CLIENT - THIS LINE IS CRITICAL
+
 client = Groq(api_key=os.environ.get("GROQ_API_KEY"))
->>>>>>> 246d1535c2153ff6d17d71fedf94c3682ddacc1e
 
 @app.get("/")
 async def read_root():
@@ -43,7 +37,7 @@ async def read_root():
 
 @app.post("/chat")
 async def chat(request: Request):
-<<<<<<< HEAD
+
 
     data = await request.json()
     user_message = data.get("message")
@@ -139,7 +133,6 @@ No ```sql.
     
     sql_query = completion.choices[0].message.content
     return {"response": sql_query}
->>>>>>> 246d1535c2153ff6d17d71fedf94c3682ddacc1e
 
     
     
