@@ -1,244 +1,135 @@
 <!DOCTYPE html>
-<html lang="en">
+<html>
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-
-<title>AI SQL Chatbot</title>
-
-<style>
-
-*{
-margin:0;
-padding:0;
-box-sizing:border-box;
-font-family:Arial,sans-serif;
-}
-
-body{
-background:#f4f7fc;
-display:flex;
-justify-content:center;
-align-items:center;
-height:100vh;
-}
-
-.container{
-width:800px;
-height:650px;
-background:white;
-border-radius:10px;
-box-shadow:0px 0px 15px rgba(0,0,0,0.2);
-display:flex;
-flex-direction:column;
-overflow:hidden;
-}
-
-.header{
-background:#007bff;
-color:white;
-padding:20px;
-text-align:center;
-font-size:28px;
-font-weight:bold;
-}
-
-#chat{
-flex:1;
-padding:20px;
-overflow-y:auto;
-background:#fafafa;
-}
-
-.message{
-margin-bottom:15px;
-}
-
-.user{
-text-align:right;
-}
-
-.user span{
-display:inline-block;
-background:#007bff;
-color:white;
-padding:10px 15px;
-border-radius:10px;
-max-width:70%;
-word-wrap:break-word;
-}
-
-.bot{
-text-align:left;
-}
-
-.bot span{
-display:inline-block;
-background:#e9ecef;
-color:black;
-padding:10px 15px;
-border-radius:10px;
-max-width:70%;
-word-wrap:break-word;
-}
-
-.input-area{
-display:flex;
-padding:15px;
-background:white;
-border-top:1px solid #ddd;
-}
-
-#userInput{
-flex:1;
-padding:12px;
-font-size:16px;
-border:1px solid #ccc;
-border-radius:5px;
-outline:none;
-}
-
-button{
-margin-left:10px;
-padding:12px 25px;
-background:#007bff;
-color:white;
-border:none;
-border-radius:5px;
-cursor:pointer;
-font-size:16px;
-}
-
-button:hover{
-background:#0056b3;
-}
-
-pre{
-white-space:pre-wrap;
-font-family:Consolas;
-}
-
-</style>
-
+    <title>AI SQL Chatbot</title>
+    <style>
+        body { font-family: Arial; background: #f5f5f5; padding: 20px; }
+        .container { max-width: 900px; margin: auto; background: white; border-radius: 10px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
+        .header { background: #007bff; color: white; padding: 15px; border-radius: 10px 10px 0 0; text-align: center; }
+        #chat { padding: 20px; height: 400px; overflow-y: scroll; }
+        .user-msg { text-align: right; margin: 10px 0; }
+        .user-msg span { background: #007bff; color: white; padding: 8px 12px; border-radius: 15px; display: inline-block; }
+        .sql-msg { background: #f4f4f4; padding: 10px; margin: 10px 0; border-left: 4px solid green; border-radius: 5px; }
+        .result-table { width: 100%; border-collapse: collapse; margin-top: 10px; }
+        .result-table th,.result-table td { border: 1px solid #ddd; padding: 8px; text-align: left; }
+        .result-table th { background: #007bff; color: white; }
+        .input-area { display: flex; padding: 20px; border-top: 1px solid #ddd; }
+        input { flex: 1; padding: 10px; border: 1px solid #ddd; border-radius: 5px; }
+        button { padding: 10px 20px; margin-left: 10px; background: #007bff; color: white; border: none; border-radius: 5px; cursor: pointer; }
+        button:hover { background: #0056b3; }
+    </style>
 </head>
-
 <body>
+    <div class="container">
+        <div class="header"><h2>AI SQL Chatbot</h2></div>
+        <div id="chat"></div>
+        <div class="input-area">
+            <input type="text" id="message" placeholder="Ask: show all employees from HR" onkeypress="if(event.key==='Enter') sendMessage()">
+            <button onclick="sendMessage()">Send</button>
+        </div>
+    </div>
 
-<div class="container">
+   <script>
+async function sendMessage() {
 
-<div class="header">
-AI SQL Chatbot
-</div>
+    const msg = document.getElementById("message").value.trim();
 
-<div id="chat"></div>
+    if (!msg) return;
 
-<div class="input-area">
+    const chat = document.getElementById("chat");
 
-<input
-type="text"
-id="userInput"
-placeholder="Ask SQL questions... Example: Show all employees">
+    // User Message
+    chat.innerHTML += `
+        <div class="user-msg">
+            <span>${msg}</span>
+        </div>
+    `;
 
-<button id="sendBtn">
-Send
-</button>
+    try {
 
-</div>
+        const res = await fetch("/chat", {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json"
+            },
+            body: JSON.stringify({
+                message: msg
+            })
+        });
 
-</div>
+        const data = await res.json();
 
-<script>
+        let html = `
+            <div class="sql-msg">
+                <b>Generated SQL:</b>
+                <pre>${data.sql}</pre>
+        `;
 
-const chat=document.getElementById("chat");
-const input=document.getElementById("userInput");
-const button=document.getElementById("sendBtn");
+        if (data.error) {
 
-button.addEventListener("click",sendMessage);
+            html += `
+                <b style="color:red;">Database Error:</b>
+                <p>${data.error}</p>
+            `;
 
-input.addEventListener("keydown",function(e){
+        }
+        else if (data.result && Array.isArray(data.result) && data.result.length > 0) {
 
-if(e.key==="Enter"){
+            html += `<b>Results:</b>`;
 
-sendMessage();
+            html += `<table class="result-table">`;
 
+            // Table Header
+            html += `<tr>`;
+
+            Object.keys(data.result[0]).forEach(col => {
+                html += `<th>${col}</th>`;
+            });
+
+            html += `</tr>`;
+
+            // Table Rows
+            data.result.forEach(row => {
+
+                html += `<tr>`;
+
+                Object.values(row).forEach(value => {
+                    html += `<td>${value}</td>`;
+                });
+
+                html += `</tr>`;
+
+            });
+
+            html += `</table>`;
+
+        }
+        else {
+
+            html += `
+                <b>Result:</b>
+                <p>No records found.</p>
+            `;
+
+        }
+
+        html += `</div>`;
+
+        chat.innerHTML += html;
+
+    }
+    catch (err) {
+
+        chat.innerHTML += `
+            <div class="sql-msg" style="border-color:red;">
+                <b>Error:</b> Can't connect to backend
+            </div>
+        `;
+
+    }
+
+    document.getElementById("message").value = "";
+
+    chat.scrollTop = chat.scrollHeight;
 }
-
-});
-
-async function sendMessage(){
-
-const message=input.value.trim();
-
-if(message===""){
-
-alert("Please enter a message");
-
-return;
-
-}
-
-chat.innerHTML+=`
-<div class="message user">
-<span>${message}</span>
-</div>
-`;
-
-chat.scrollTop=chat.scrollHeight;
-
-input.value="";
-
-try{
-
-const response=await fetch("/chat",{
-
-method:"POST",
-
-headers:{
-
-"Content-Type":"application/json"
-
-},
-
-body:JSON.stringify({
-
-message:message
-
-})
-
-});
-
-if(!response.ok){
-
-throw new Error("Server Error");
-
-}
-
-const data=await response.json();
-
-chat.innerHTML+=`
-<div class="message bot">
-<span><pre>${data.response}</pre></span>
-</div>
-`;
-
-}catch(error){
-
-chat.innerHTML+=`
-<div class="message bot">
-<span style="color:red;">
-Unable to connect to server.<br>
-${error.message}
-</span>
-</div>
-`;
-
-}
-
-chat.scrollTop=chat.scrollHeight;
-
-}
-
 </script>
-
-</body>
-</html>
