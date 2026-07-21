@@ -118,11 +118,11 @@ No ```sql.
         return {
             "error": str(e)
         }
-=======
+
     data = await request.json()
     user_message = data.get("message")
     
-    # Call Groq
+    
     completion = client.chat.completions.create(
         model="llama3-8b-8192",
         messages=[
