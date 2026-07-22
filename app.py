@@ -1,18 +1,15 @@
-from fastapi import FastAPI, Request
+from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
+from pydantic import BaseModel
 from groq import Groq
-from dotenv import load_dotenv
 import psycopg2
 import os
 
-
-load_dotenv()
-
-
 app = FastAPI()
 
-
+# Enable CORS
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -21,118 +18,99 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# Serve static files
+if os.path.exists("static"):
+    app.mount("/static", StaticFiles(directory="static"), name="static")
 
-
+# Initialize Groq Client
 client = Groq(
     api_key=os.getenv("GROQ_API_KEY")
 )
 
-client = Groq(api_key=os.environ.get("GROQ_API_KEY"))
+# PostgreSQL Connection (YOUR CODE - UNCHANGED)
+def get_connection():
+    return psycopg2.connect(
+        host=os.getenv("DB_HOST"),
+        port=os.getenv("DB_PORT"),
+        database=os.getenv("DB_NAME"),
+        user=os.getenv("DB_USER"),
+        password=os.getenv("DB_PASSWORD")
+    )
 
+# Request Model
+class ChatRequest(BaseModel):
+    message: str
+
+# Home Route
 @app.get("/")
-async def read_root():
-    return FileResponse('index.html')
+async def home():
+    return FileResponse("index.html")
 
-
-
+# Chat Route
 @app.post("/chat")
-async def chat(request: Request):
+async def chat(request: ChatRequest):
 
+    prompt = f"""
+You are an AI SQL Assistant.
 
-    data = await request.json()
-    user_message = data.get("message")
+Convert the following English question into a valid PostgreSQL SQL query.
+
+Only return the SQL query.
+Do not include explanations.
+Do not include markdown.
+
+Question:
+{request.message}
+"""
 
     try:
-        
-        completion = client.chat.completions.create(
-            model="llama-3.1-8b-instant",
+        # Generate SQL
+        response = client.chat.completions.create(
+            model="llama-3.3-70b-versatile",
             messages=[
                 {
-                    "role": "system",
-                    "content": """
-You are a PostgreSQL expert.
-
-Convert the user's request into PostgreSQL SQL.
-
-Return ONLY SQL.
-No explanation.
-No markdown.
-No ```sql.
-"""
-                },
-                {
                     "role": "user",
-                    "content": user_message
+                    "content": prompt
                 }
             ],
             temperature=0
         )
 
-        sql_query = completion.choices[0].message.content.strip()
+        sql = response.choices[0].message.content.strip()
 
-        sql_query = (
-            sql_query
-            .replace("```sql", "")
-            .replace("```", "")
-            .strip()
-        )
+        # Remove markdown if present
+        sql = sql.replace("```sql", "").replace("```", "").strip()
 
-        
-        conn = psycopg2.connect(os.getenv("DATABASE_URL"))
+        # Connect to PostgreSQL
+        conn = get_connection()
         cur = conn.cursor()
 
-        
-        cur.execute(sql_query)
+        # Execute SQL
+        cur.execute(sql)
 
-        
-        if sql_query.lower().startswith("select"):
+        # If SELECT query
+        if sql.lower().startswith("select"):
             rows = cur.fetchall()
             columns = [desc[0] for desc in cur.description]
 
             result = []
-
             for row in rows:
                 result.append(dict(zip(columns, row)))
-
-            cur.close()
-            conn.close()
-
-            return {
-                "sql": sql_query,
-                "result": result
-            }
-
-        
         else:
             conn.commit()
+            result = [{"message": "Query executed successfully"}]
 
-            cur.close()
-            conn.close()
+        cur.close()
+        conn.close()
 
-            return {
-                "sql": sql_query,
-                "result": "Query executed successfully."
-            }
+        return {
+            "sql": sql,
+            "result": result
+        }
 
     except Exception as e:
         return {
+            "sql": "",
             "error": str(e)
         }
-
-    data = await request.json()
-    user_message = data.get("message")
-    
-    
-    completion = client.chat.completions.create(
-        model="llama3-8b-8192",
-        messages=[
-            {"role": "system", "content": "You are a SQL assistant. Convert user request to SQL query only."},
-            {"role": "user", "content": user_message}
-        ]
-    )
-    
-    sql_query = completion.choices[0].message.content
-    return {"response": sql_query}
-
-    
-    
+      
